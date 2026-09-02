@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT_CACHE_BOUNDARY } from "@openclaw/ai/internal/shared";
 import { describe, expect, it } from "vitest";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { CHANNEL_IDS } from "../channels/ids.js";
+import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import {
   captureActivePluginRegistrySnapshot,
   restoreActivePluginRegistrySnapshot,
@@ -1978,6 +1979,21 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Media attachment: own line `MEDIA:<path-or-url>` per item");
     expect(prompt).toContain("path is not prose");
   });
+
+  it.each(["automatic", "message_tool_only"] as const)(
+    "points generated HTML attachments at the trusted temp root for %s delivery",
+    (sourceReplyDeliveryMode) => {
+      const prompt = buildAgentSystemPrompt({
+        workspaceDir: "/tmp/agent-workspace",
+        toolNames: sourceReplyDeliveryMode === "message_tool_only" ? ["message"] : [],
+        sourceReplyDeliveryMode,
+      });
+
+      expect(prompt).toContain(
+        `Generated HTML: write the complete file under \`${resolvePreferredOpenClawTmpDir()}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
+      );
+    },
+  );
 
   it("keeps group/channel etiquette scoped to message-tool-only delivery", () => {
     const prompt = buildAgentSystemPrompt({
