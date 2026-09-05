@@ -425,17 +425,22 @@ function buildAssistantOutputDirectivesSection(params: {
   isMinimal: boolean;
   sourceMessageToolOnly: boolean;
   messageToolAvailable: boolean;
-  trustedGeneratedHtmlDir: string;
+  trustedGeneratedHtmlDir?: string;
 }) {
   if (params.isMinimal || (params.sourceMessageToolOnly && !params.messageToolAvailable)) {
     return [];
   }
+  const generatedHtmlGuidance = params.trustedGeneratedHtmlDir
+    ? [
+        `- Generated HTML: write the complete file under \`${params.trustedGeneratedHtmlDir}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
+      ]
+    : [];
   if (params.sourceMessageToolOnly) {
     return [
       "## Assistant Output Directives",
       "- Visible source output: `message(action=send)`.",
       "- Media paths = attachments, not prose. One: `media`; many: `attachments: [{media: ...}]`.",
-      `- Generated HTML: write the complete file under \`${params.trustedGeneratedHtmlDir}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
+      ...generatedHtmlGuidance,
       "- Synthesized speech: `voiceText`; optional `voiceProvider`, `voiceId`; voice note: `asVoice`.",
       "- No legacy `MEDIA:` here. Explicit native reply: `replyTo`.",
       "",
@@ -447,7 +452,7 @@ function buildAssistantOutputDirectivesSection(params: {
   return [
     "## Assistant Output Directives",
     "- Media attachment: own line `MEDIA:<path-or-url>` per item; path is not prose.",
-    `- Generated HTML: write the complete file under \`${params.trustedGeneratedHtmlDir}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
+    ...generatedHtmlGuidance,
     "- Directive starts line, plain text, outside fences/Markdown; never inline or wrapped.",
     "- Attached voice note: `[[audio_as_voice]]`.",
     "- Native reply starts with `[[reply_to_current]]`; explicit id only: `[[reply_to:<id>]]`.",
@@ -1065,7 +1070,15 @@ export function buildAgentSystemPrompt(params: {
       })
     : [];
   const sourceMessageToolOnly = params.sourceReplyDeliveryMode === "message_tool_only";
-  const trustedGeneratedHtmlDir = sanitizeForPromptLiteral(resolvePreferredOpenClawTmpDir());
+  // Host temp paths are not writable staging instructions for restricted runtimes.
+  // Modes without output directives must not acquire a filesystem dependency.
+  const trustedGeneratedHtmlDir =
+    !isMinimal &&
+    (!sourceMessageToolOnly || messageToolAvailable) &&
+    !sandboxedRuntime &&
+    params.fsWorkspaceOnly !== true
+      ? sanitizeForPromptLiteral(resolvePreferredOpenClawTmpDir())
+      : undefined;
   const messageChannelOptions = availableTools.has("message")
     ? buildMessageChannelOptions(runtimeChannel)
     : undefined;

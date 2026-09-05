@@ -1,10 +1,10 @@
 import { SYSTEM_PROMPT_CACHE_BOUNDARY } from "@openclaw/ai/internal/shared";
 // System prompt tests cover the main prompt facade, prompt-surface routing, and
 // user-visible sections for owners, tools, safety, skills, and subagents.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { CHANNEL_IDS } from "../channels/ids.js";
-import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
+import * as openClawTmpDir from "../infra/tmp-openclaw-dir.js";
 import {
   captureActivePluginRegistrySnapshot,
   restoreActivePluginRegistrySnapshot,
@@ -1990,8 +1990,40 @@ describe("buildAgentSystemPrompt", () => {
       });
 
       expect(prompt).toContain(
-        `Generated HTML: write the complete file under \`${resolvePreferredOpenClawTmpDir()}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
+        `Generated HTML: write the complete file under \`${openClawTmpDir.resolvePreferredOpenClawTmpDir()}\`, then attach that path; workspace or manually copied outbound HTML is rejected.`,
       );
+    },
+  );
+
+  it.each([
+    { name: "workspace-only", fsWorkspaceOnly: true },
+    {
+      name: "sandboxed",
+      sandboxInfo: {
+        enabled: true,
+        workspaceDir: "/tmp/sandbox",
+        containerWorkspaceDir: "/workspace",
+        workspaceAccess: "rw" as const,
+      },
+    },
+    { name: "minimal", promptMode: "minimal" as const },
+    { name: "none", promptMode: "none" as const },
+    { name: "message tool unavailable", sourceReplyDeliveryMode: "message_tool_only" as const },
+  ])(
+    "omits host HTML staging in $name prompts without requiring a temp root",
+    ({ name: _name, ...params }) => {
+      const resolveTmpDir = vi
+        .spyOn(openClawTmpDir, "resolvePreferredOpenClawTmpDir")
+        .mockImplementation(() => {
+          throw new Error("HTML staging is unavailable");
+        });
+      try {
+        const prompt = buildAgentSystemPrompt({ workspaceDir: "/tmp/agent-workspace", ...params });
+        expect(prompt).not.toContain("Generated HTML:");
+        expect(resolveTmpDir).not.toHaveBeenCalled();
+      } finally {
+        resolveTmpDir.mockRestore();
+      }
     },
   );
 
