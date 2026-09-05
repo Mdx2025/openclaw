@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, assert, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 import { buildFullReleaseCandidateBinding } from "../../scripts/full-release-candidate-contract.mjs";
 import {
   composeReleaseAttemptJobs,
@@ -32,6 +32,7 @@ import {
   verifyReleaseStateArtifacts,
   updateReleaseTransportEpisode,
 } from "../../scripts/full-release-validation-state.mjs";
+import { captureEnv, setTestEnvValue } from "../../src/test-utils/env.js";
 import {
   fullReleaseCandidateBindingFixture,
   fullReleaseCandidateManifestFixture,
@@ -1049,6 +1050,14 @@ describe("release child attempt composition", () => {
 });
 
 describe("release decision policy", () => {
+  let repositoryEnv: ReturnType<typeof captureEnv>;
+  beforeEach(() => {
+    repositoryEnv = captureEnv(["GITHUB_REPOSITORY"]);
+    // In-process API fixtures belong to this repository, independent of the CI fork.
+    setTestEnvValue("GITHUB_REPOSITORY", "openclaw/openclaw");
+  });
+  afterEach(() => repositoryEnv.restore());
+
   it("reports a decisive blocker while unrelated diagnostics continue", () => {
     const result = classifyReleaseSnapshot({
       children: [
